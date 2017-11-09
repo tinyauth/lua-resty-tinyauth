@@ -11,7 +11,7 @@ Alpha.
  * User and group based ACLs for any service that can be proxied by nginx
  * Use URL maps to break down your API into multiple distinct actions to allow for fine grained permissions.
 
-## Synopsis
+## Synopsis
 
 ```` lua
 lua_package_path "/path/to/lua-resty-microauth/lib/?.lua;;";
