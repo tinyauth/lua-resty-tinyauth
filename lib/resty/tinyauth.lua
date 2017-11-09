@@ -40,7 +40,7 @@ local function req_matches_uri(uri)
 end
 
 
-function _M.new(self, endpoint, user, pass)
+function _M.new(endpoint, user, pass)
     return setmetatable({
         endpoint = endpoint,
         user = user,
@@ -50,14 +50,18 @@ function _M.new(self, endpoint, user, pass)
 end
 
 
-function _M.authorize_for_url(self, default_action, matches)
-  for k, v in pairs(matches) do
-    if req_matches_uri(v[1]) and req_matches_method(v[2]) then
-      return _M.authorize_for_action(self, v[3])
+function _M.authorize_for_url(self, uri_map, default_action)
+  for idx, route in pairs(uri_map) do
+    if req_matches_uri(route[1]) and req_matches_method(route[2]) then
+      return _M.authorize_for_action(self, route[3])
     end
   end
 
-  return _M.authorize_for_action(self, default_action)
+  if default_action then
+    return _M.authorize_for_action(self, default_action)
+  end
+
+  ngx.exit(ngx.HTTP_FORBIDDEN)
 end
 
 
