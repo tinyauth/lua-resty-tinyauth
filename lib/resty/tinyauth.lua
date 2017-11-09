@@ -4,7 +4,7 @@ local http = require "resty.http"
 local ngx = ngx
 
 local _M = {
-    _VERSION = '0.1',
+    _VERSION = '0.2',
 }
 local mt = { __index = _M }
 
