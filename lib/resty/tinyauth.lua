@@ -40,11 +40,19 @@ local function req_matches_uri(uri)
 end
 
 
-function _M.new(endpoint, user, pass)
+function _M.new(endpoint, user, pass, kwargs)
+    kwargs = kwargs or {}
+
+    local ssl_verify = true
+    if kwargs.ssl_verify == false then
+        ssl_verify = false
+    end
+
     return setmetatable({
         endpoint = endpoint,
         user = user,
         pass = pass,
+        ssl_verify = ssl_verify,
         client = http.new(),
     }, mt)
 end
@@ -85,7 +93,8 @@ function _M.authorize_for_action(self, action)
         headers = {
             ["Content-Type"] = "application/json",
             Authorization = 'Basic '..ngx.encode_base64(self.user .. ':' .. self.pass)
-        }
+        },
+        ssl_verify = self.ssl_verify
     })
 
     if not res then
