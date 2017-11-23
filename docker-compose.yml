@@ -22,6 +22,8 @@ services:
     environment:
     - POSTGRES_USER=tinyauth
     - POSTGRES_PASSWORD=tinyauth
+    ports:
+      - "0.0.0.0:5000:5000"
 
   httpbin:
     build: example/httpbin

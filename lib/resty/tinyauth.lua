@@ -4,7 +4,7 @@ local http = require "resty.http"
 local ngx = ngx
 
 local _M = {
-    _VERSION = '0.2',
+    _VERSION = '0.3',
 }
 local mt = { __index = _M }
 
@@ -58,22 +58,22 @@ function _M.new(endpoint, user, pass, kwargs)
 end
 
 
-function _M.authorize_for_url(self, uri_map, default_action)
+function _M.authorize_token_for_url(self, uri_map, default_action)
   for idx, route in pairs(uri_map) do
     if req_matches_uri(route[1]) and req_matches_method(route[2]) then
-      return _M.authorize_for_action(self, route[3])
+      return _M.authorize_token_for_action(self, route[3])
     end
   end
 
   if default_action then
-    return _M.authorize_for_action(self, default_action)
+    return _M.authorize_token_for_action(self, default_action)
   end
 
   ngx.exit(ngx.HTTP_FORBIDDEN)
 end
 
 
-function _M.authorize_for_action(self, action)
+function _M.authorize_token_for_action(self, action)
     local client = self.client
 
     local body = cjson.encode({
@@ -88,6 +88,66 @@ function _M.authorize_for_action(self, action)
     ngx.log(ngx.DEBUG, "REQUEST: " .. body)
 
     local res, err = client:request_uri(self.endpoint .. "authorize", {
+        method = "POST",
+        body = body,
+        headers = {
+            ["Content-Type"] = "application/json",
+            Authorization = 'Basic '..ngx.encode_base64(self.user .. ':' .. self.pass)
+        },
+        ssl_verify = self.ssl_verify
+    })
+
+    if not res then
+        ngx.log(ngx.ERR, err)
+        ngx.exit(ngx.HTTP_FORBIDDEN)
+        return
+    end
+
+    ngx.log(ngx.DEBUG, "RESPONSE: " .. res.body)
+
+    local auth = cjson.decode(res.body)
+
+    if not auth['Authorized'] then
+        ngx.exit(ngx.HTTP_FORBIDDEN)
+        return
+    end
+
+    if auth['Identity'] then
+        ngx.req.set_header('X-User', auth['Identity'])
+    end
+end
+
+
+function _M.authorize_login_for_url(self, uri_map, default_action)
+  for idx, route in pairs(uri_map) do
+    if req_matches_uri(route[1]) and req_matches_method(route[2]) then
+      return _M.authorize_login_for_action(self, route[3])
+    end
+  end
+
+  if default_action then
+    return _M.authorize_login_for_action(self, default_action)
+  end
+
+  ngx.exit(ngx.HTTP_FORBIDDEN)
+end
+
+
+function _M.authorize_login_for_action(self, action)
+    local client = self.client
+
+    local body = cjson.encode({
+        action = action,
+        resource = get_resource_urn(),
+        headers = get_header_list(),
+        context = {
+            SourceIP = ngx.var.remote_addr
+        }
+    })
+
+    ngx.log(ngx.DEBUG, "REQUEST: " .. body)
+
+    local res, err = client:request_uri(self.endpoint .. "authorize-login", {
         method = "POST",
         body = body,
         headers = {

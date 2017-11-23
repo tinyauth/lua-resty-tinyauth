@@ -22,7 +22,7 @@ server {
       local tinyauth = require('resty/tinyauth');
       local client = tinyauth.new("http://tinyauth:5000/api/v1/", "gatekeeper", "keymaster")
 
-      client:authorize_for_url({
+      client:authorize_token_for_url({
         {"/ip",         {"GET"},  "GetOriginIp"},
         {"/stream/.*",  {"GET"},  "StreamLines"},
       }, "ProxyRequest")
@@ -44,17 +44,45 @@ server {
 
 Creates the tinyauth object.
 
-### authorize_for_action
+### authorize_token_for_action
 
-`syntax: client:authorize_for_action(action)`
+`syntax: client:authorize_token_for_action(action)`
 
 All traffic that is subjected to this authorization will be treated as a single action type. This is useful if you either have access to an API or you do not.
 
-### authorize_for_url
+### authorize_token_for_url
 
-`syntax: client:authorize_for_url(uri_map)`
+`syntax: client:authorize_token_for_url(uri_map)`
 
-`syntax: client:authorize_for_url(uri_map, default)`
+`syntax: client:authorize_token_for_url(uri_map, default)`
+
+Traffic URI is looked up in a table to find out what action to use when authorizing with tinyauth.
+
+If no matches are found and default is not set then the access attempt will be forbidden.
+
+If no matches are found and a default is set then the access attempt will be authorized with the default action.
+
+`uri_map` is an array of 'routes'. If a route matches then we know what action to associate it with when querying tinyauth. The routes might look like:
+
+```
+local routes = {
+  {"/ip",       {"GET"},    "GetIp"},
+  {"/gzip",     {"GET"},    "GetGzippedData"},
+  {"/stream/.*", {"GET"},   "StreamLines"},
+}
+```
+
+### authorize_login_for_action
+
+`syntax: client:authorize_login_for_action(action)`
+
+All traffic that is subjected to this authorization will be treated as a single action type. This is useful if you either have access to an API or you do not.
+
+### authorize_login_for_url
+
+`syntax: client:authorize_login_for_url(uri_map)`
+
+`syntax: client:authorize_login_for_url(uri_map, default)`
 
 Traffic URI is looked up in a table to find out what action to use when authorizing with tinyauth.
 
