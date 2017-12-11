@@ -9,6 +9,23 @@ local _M = {
 local mt = { __index = _M }
 
 
+local login_html = [[
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <link rel="shortcut icon" href="/favicon.ico">
+    <title>LOGIN</title>
+  </head>
+  <body style="background-color: rgb(0, 188, 212);">
+    <div id="root"></div>
+    <script type="text/javascript" src="/_JS_HASH_"></script>
+  </body>
+</html>
+]]
+
+
 local function get_header_list()
     local headers = {}
     local i = 1
@@ -45,7 +62,12 @@ function _M.new(endpoint, user, pass, kwargs)
 
     local ssl_verify = true
     if kwargs.ssl_verify == false then
-        ssl_verify = false
+      ssl_verify = false
+    end
+
+    local service = "resty"
+    if kwargs.service then
+      service = kwargs.service
     end
 
     return setmetatable({
@@ -53,8 +75,85 @@ function _M.new(endpoint, user, pass, kwargs)
         user = user,
         pass = pass,
         ssl_verify = ssl_verify,
+        service = service,
         client = http.new(),
     }, mt)
+end
+
+function _M.handle_login(self)
+  if ngx.req.get_method() == "GET" then
+    ngx.header.content_type = 'text/html';
+    ngx.say(string.gsub(login_html, '_JS_HASH_', 'js-hash'))
+    return
+  end
+
+  if ngx.req.get_method() ~= "POST" then
+    ngx.exit(ngx.HTTP_NOT_FOUND)
+    return
+  end
+
+  ngx.header.content_type = 'application/json';
+
+  ngx.req.read_body()
+  local login_attempt_raw = ngx.var.request_body
+  if not login_attempt_raw then
+    ngx.status = ngx.HTTP_FORBIDDEN
+    ngx.say('{"message": "Request is invalid"}')
+    ngx.exit(ngx.HTTP_OK)
+    return
+  end
+
+  -- ngx.log(ngx.ERR, login_attempt_raw)
+
+  local login_attempt = cjson.decode(login_attempt_raw)
+  if not login_attempt["username"] or not login_attempt["password"] then
+    ngx.status = ngx.HTTP_FORBIDDEN
+    ngx.say('{"message": "You must specify a username and password"}')
+    ngx.exit(ngx.HTTP_OK)
+    return
+  end
+
+  local resp = _M.get_token_for_login(self, login_attempt["username"], login_attempt["password"])
+
+  -- ngx.log(ngx.ERR, cjson.encode(resp))
+
+  ngx.header["Set-Cookie"] = {
+    "tinysess=" .. resp["token"] .. "; Path=/; Expires=" .. ngx.cookie_time(ngx.time() + 60*60*8) .. "; HttpOnly; Secure",
+    "tinycsrf=" .. resp["csrf"] .. "; Path=/; Expires=" .. ngx.cookie_time(ngx.time() + 60*60*8) .. "; Secure"
+  }
+
+  ngx.say("{}")
+end
+
+
+function _M.get_token_for_login(self, username, password)
+  local client = self.client
+
+  local body = cjson.encode({
+    username = username,
+    password = password,
+  })
+
+  ngx.log(ngx.DEBUG, "get_token_for_login request: " .. body)
+
+  local res, err = client:request_uri(self.endpoint .. "services/" .. self.service .. "/get-token-for-login", {
+    method = "POST",
+    body = body,
+    headers = {
+      ["Content-Type"] = "application/json",
+      Authorization = 'Basic '..ngx.encode_base64(self.user .. ':' .. self.pass)
+    },
+    ssl_verify = self.ssl_verify
+  })
+
+  if not res then
+      ngx.log(ngx.ERR, err)
+      return
+  end
+
+  ngx.log(ngx.DEBUG, "get_token_for_login response: " .. res.body)
+
+  return cjson.decode(res.body)
 end
 
 
@@ -69,7 +168,9 @@ function _M.authorize_token_for_url(self, uri_map, default_action)
     return _M.authorize_token_for_action(self, default_action)
   end
 
-  ngx.exit(ngx.HTTP_FORBIDDEN)
+  ngx.status = ngx.HTTP_FORBIDDEN
+  ngx.say('{}')
+  ngx.exit(ngx.HTTP_OK)
 end
 
 
@@ -108,7 +209,9 @@ function _M.authorize_token_for_action(self, action)
     local auth = cjson.decode(res.body)
 
     if not auth['Authorized'] then
-        ngx.exit(ngx.HTTP_FORBIDDEN)
+        ngx.status = ngx.HTTP_FORBIDDEN
+        ngx.say('{}')
+        ngx.exit(ngx.HTTP_OK)
         return
     end
 
