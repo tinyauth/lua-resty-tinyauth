@@ -118,7 +118,7 @@ function _M.handle_login(self, js_hash)
   -- ngx.log(ngx.ERR, cjson.encode(resp))
 
   ngx.header["Set-Cookie"] = {
-    "tinysess=" .. resp["token"] .. "; Expires=" .. ngx.cookie_time(ngx.time() + 60*60*8) .. "; HttpOnly; SameSite=strict",
+    "tinysess=" .. resp["token"] .. "; Expires=" .. ngx.cookie_time(ngx.time() + 60*60*8) .. "; Secure; HttpOnly; SameSite=strict",
     -- "tinycsrf=" .. resp["csrf"] .. "; Path=/; Expires=" .. ngx.cookie_time(ngx.time() + 60*60*8) .. "; Secure"
   }
 
