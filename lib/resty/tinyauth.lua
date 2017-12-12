@@ -20,7 +20,7 @@ local login_html = [[
   </head>
   <body style="background-color: rgb(0, 188, 212);">
     <div id="root"></div>
-    <script type="text/javascript" src="/_JS_HASH_"></script>
+    <script type="text/javascript" src="/login/static/main._JS_HASH_.js"></script>
   </body>
 </html>
 ]]
@@ -80,10 +80,10 @@ function _M.new(endpoint, user, pass, kwargs)
     }, mt)
 end
 
-function _M.handle_login(self)
+function _M.handle_login(self, js_hash)
   if ngx.req.get_method() == "GET" then
     ngx.header.content_type = 'text/html';
-    ngx.say(string.gsub(login_html, '_JS_HASH_', 'js-hash'))
+    ngx.say(string.gsub(login_html, '_JS_HASH_', js_hash))
     return
   end
 
@@ -118,11 +118,12 @@ function _M.handle_login(self)
   -- ngx.log(ngx.ERR, cjson.encode(resp))
 
   ngx.header["Set-Cookie"] = {
-    "tinysess=" .. resp["token"] .. "; Path=/; Expires=" .. ngx.cookie_time(ngx.time() + 60*60*8) .. "; HttpOnly; Secure",
-    "tinycsrf=" .. resp["csrf"] .. "; Path=/; Expires=" .. ngx.cookie_time(ngx.time() + 60*60*8) .. "; Secure"
+    "tinysess=" .. resp["token"] .. "; Expires=" .. ngx.cookie_time(ngx.time() + 60*60*8) .. "; HttpOnly; SameSite=strict",
+    -- "tinycsrf=" .. resp["csrf"] .. "; Path=/; Expires=" .. ngx.cookie_time(ngx.time() + 60*60*8) .. "; Secure"
   }
 
   ngx.say("{}")
+  ngx.exit(ngx.HTTP_OK)
 end
 
 
@@ -132,6 +133,7 @@ function _M.get_token_for_login(self, username, password)
   local body = cjson.encode({
     username = username,
     password = password,
+    ["csrf-strategy"] = "cookie",
   })
 
   ngx.log(ngx.DEBUG, "get_token_for_login request: " .. body)
@@ -168,9 +170,10 @@ function _M.authorize_token_for_url(self, uri_map, default_action)
     return _M.authorize_token_for_action(self, default_action)
   end
 
-  ngx.status = ngx.HTTP_FORBIDDEN
-  ngx.say('{}')
-  ngx.exit(ngx.HTTP_OK)
+  return {
+    Authorized = false,
+    ErrorCode = "Access to this resource is not permitted"
+  }
 end
 
 
@@ -186,7 +189,7 @@ function _M.authorize_token_for_action(self, action)
         }
     })
 
-    ngx.log(ngx.DEBUG, "REQUEST: " .. body)
+    -- ngx.log(ngx.ERR, "REQUEST: " .. body)
 
     local res, err = client:request_uri(self.endpoint .. "authorize", {
         method = "POST",
@@ -199,25 +202,18 @@ function _M.authorize_token_for_action(self, action)
     })
 
     if not res then
-        ngx.log(ngx.ERR, err)
-        ngx.exit(ngx.HTTP_FORBIDDEN)
-        return
+      ngx.log(ngx.ERR, err)
+
+      return {
+        Authorized = false,
+        ErrorCode = "Error whilst authenticating token",
+      }
     end
 
-    ngx.log(ngx.DEBUG, "RESPONSE: " .. res.body)
+    -- ngx.log(ngx.ERR, "RESPONSE: " .. res.body)
 
     local auth = cjson.decode(res.body)
-
-    if not auth['Authorized'] then
-        ngx.status = ngx.HTTP_FORBIDDEN
-        ngx.say('{}')
-        ngx.exit(ngx.HTTP_OK)
-        return
-    end
-
-    if auth['Identity'] then
-        ngx.req.set_header('X-User', auth['Identity'])
-    end
+    return auth
 end
 
 
@@ -232,7 +228,10 @@ function _M.authorize_login_for_url(self, uri_map, default_action)
     return _M.authorize_login_for_action(self, default_action)
   end
 
-  ngx.exit(ngx.HTTP_FORBIDDEN)
+  return {
+    Authorized = false,
+    ErrorCode = "Access to this resource is not permitted"
+  }
 end
 
 
@@ -261,23 +260,18 @@ function _M.authorize_login_for_action(self, action)
     })
 
     if not res then
-        ngx.log(ngx.ERR, err)
-        ngx.exit(ngx.HTTP_FORBIDDEN)
-        return
+      ngx.log(ngx.ERR, err)
+
+      return {
+        Authorized = false,
+        ErrorCode = "Error whilst authenticating login",
+      }
     end
 
     ngx.log(ngx.DEBUG, "RESPONSE: " .. res.body)
 
     local auth = cjson.decode(res.body)
-
-    if not auth['Authorized'] then
-        ngx.exit(ngx.HTTP_FORBIDDEN)
-        return
-    end
-
-    if auth['Identity'] then
-        ngx.req.set_header('X-User', auth['Identity'])
-    end
+    return auth
 end
 
 

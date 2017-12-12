@@ -7,4 +7,6 @@ COPY --from=builder /usr/local/openresty/site /usr/local/openresty/site
 COPY example/nginx/nginx.conf /etc/nginx/nginx.conf
 COPY lib/resty/tinyauth.lua /usr/local/openresty/site/lualib/resty/tinyauth.lua
 
+COPY example/nginx/*.js /srv/static/
+
 CMD ["nginx", "-c", "/etc/nginx/nginx.conf"]
